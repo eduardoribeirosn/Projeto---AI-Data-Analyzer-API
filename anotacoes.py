@@ -1,5 +1,7 @@
 # Importações das bibliotecas a serem utilizadas (flask, pandas, langgraph)
 
+# Conexão com a IA
+
 # Criação da Class (class -> TypedDict)
 
 # Ligação do Flask (app = Flask(__name__)

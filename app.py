@@ -7,6 +7,7 @@ from pandas import DataFrame
 from langgraph.graph import StateGraph, END
 from openai import OpenAI
 
+# Conexão com IA Local
 client = OpenAI(
     base_url="http://127.0.0.1:1234/v1",
     api_key="lm-studio"
