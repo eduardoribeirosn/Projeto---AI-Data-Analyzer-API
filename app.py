@@ -5,6 +5,12 @@ from flask import Flask, request
 import pandas as pd
 from pandas import DataFrame
 from langgraph.graph import StateGraph, END
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://127.0.0.1:1234/v1",
+    api_key="lm-studio"
+)
 
 
 # Criação da Class
@@ -16,10 +22,13 @@ class State(TypedDict):
     colunas: int
     nomes_colunas: list
     tipos_colunas: list
+    insights: str
+
 
 # Criação da ligação do Flask
 app = Flask(__name__)
 
+# Funções -> Nodes
 def generate_dataframe(state : State):
     try:
         data_io_temp = StringIO(state["data"])
@@ -49,11 +58,34 @@ def analyze_typed_data(state: State):
     for item_type in state["df"].dtypes:
         if item_type == "int64":
             temp_typed_columns.append("número")
-        elif pd.api.types
         else:
             temp_typed_columns.append("text")
-    print(temp_typed_columns)
     return {"tipos_colunas": temp_typed_columns}
+
+def generate_insights(state : State):
+    response = client.chat.completions.create(
+        model="google/gemma-3-4b",
+        messages=[
+            {
+                "role": "user",
+                "content": f"""
+                Você é um analista de dados.
+                Dataset:
+                - Linhas: {state["linhas"]}
+                - Colunas: {state["colunas"]}
+                - Nomes colunas: {state["nomes_colunas"]}
+                - Tipos colunas: {state["tipos_colunas"]}
+                
+                Uma parte para exemplo: {state["df"].head()}
+                Outra parte para exemplo: {state["df"].tail()}
+                
+                Gere insights claros e objetivos com poucas linhas.
+                """
+            }
+        ]
+    )
+    response_text = response.choices[0].message.content
+    return {"insights": response_text}
 
 # Construir Graph
 def build_graph():
@@ -61,17 +93,15 @@ def build_graph():
     graph = StateGraph(State)
 
     # Adicionar os nodes
-    # graph.add_node("generate_data_io", generate_data_io)
     graph.add_node("parse_data", generate_dataframe)
-    # graph.add_node("verify_error_df", verify_error_df)
     graph.add_node("count_lines", count_lines)
     graph.add_node("count_columns", count_columns)
     graph.add_node("analyze_name_data", analyze_name_data)
     graph.add_node("analyze_typed_data", analyze_typed_data)
+    graph.add_node("generate_insights", generate_insights)
 
     # Adicionar os Edges (caminhos)
     graph.set_entry_point("parse_data")
-    # graph.add_edge("generate_data_io", "parse_data")
     graph.add_conditional_edges(
         "parse_data",
         verify_error_df,
@@ -84,7 +114,8 @@ def build_graph():
     graph.add_edge("count_lines", "count_columns")
     graph.add_edge("count_columns", "analyze_name_data")
     graph.add_edge("analyze_name_data", "analyze_typed_data")
-    graph.add_edge("analyze_typed_data", END)
+    graph.add_edge("analyze_typed_data", "generate_insights")
+    graph.add_edge("generate_insights", END)
 
     return graph.compile()
 
@@ -111,6 +142,7 @@ def analyze():
         "colunas": result["colunas"],
         "nomes_colunas": result["nomes_colunas"],
         "tipos_colunas": result["tipos_colunas"],
+        "insights": result["insights"]
     }
 
     return result_changed
